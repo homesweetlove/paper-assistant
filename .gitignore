@@ -21,3 +21,6 @@ Thumbs.db
 
 # Office temporary files
 ~$*.doc*
+
+# Local agent config
+.devin/
