@@ -9,8 +9,13 @@
 실행: python paper_assistant.py
 """
 import re
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+
+from paper_assistant.analysis import analyze_text
+from paper_assistant.documents import export_plain_docx, load_document
+from paper_assistant.reports import save_report
 
 try:
     from docx import Document
@@ -111,16 +116,33 @@ def analyze(text, long_sent_limit=100, repeat_ratio=0.02, repeat_min=4):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("논문 작성 보조 도구")
-        self.geometry("1100x700")
+        self.title("Paper Assistant · 논문 작성 보조")
+        self.geometry("1200x760")
+        self.minsize(900, 580)
+        self.configure(bg="#f2f6fa")
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("TFrame", background="#f2f6fa")
+        style.configure("TLabel", background="#f2f6fa", foreground="#183954")
+        style.configure("TButton", padding=(10, 7))
+        style.configure("TNotebook.Tab", padding=(12, 8))
+        style.configure("Treeview", rowheight=31)
         self.issues = []
+        self.source_path = None
+        self.analysis_result = None
         self._build_ui()
 
     def _build_ui(self):
+        title = ttk.Frame(self)
+        title.pack(fill="x", padx=18, pady=(16, 9))
+        ttk.Label(title, text="Paper Assistant", font=("맑은 고딕", 19, "bold")).pack(anchor="w")
+        ttk.Label(title, text="오프라인 논문 작성 보조 · DOCX 원본 파일을 변경하지 않습니다.").pack(anchor="w")
+
         bar = ttk.Frame(self)
-        bar.pack(fill="x", padx=6, pady=4)
-        ttk.Button(bar, text="docx 열기", command=self.open_docx).pack(side="left")
-        ttk.Button(bar, text="docx로 저장", command=self.save_docx).pack(side="left", padx=4)
+        bar.pack(fill="x", padx=18, pady=7)
+        ttk.Button(bar, text="문서 열기", command=self.open_docx).pack(side="left")
+        ttk.Button(bar, text="새 DOCX 초안", command=self.save_docx).pack(side="left", padx=4)
+        ttk.Button(bar, text="검사 보고서", command=self.export_report).pack(side="left", padx=4)
         ttk.Button(bar, text="분석 실행", command=self.run_analysis).pack(side="left", padx=4)
         ttk.Button(bar, text="전체 복사", command=self.copy_all).pack(side="left", padx=4)
         ttk.Label(bar, text="긴 문장 기준:").pack(side="left", padx=(16, 2))
@@ -129,17 +151,22 @@ class App(tk.Tk):
         ttk.Label(bar, text="자").pack(side="left")
         self.realtime_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(bar, text="실시간 분석", variable=self.realtime_var).pack(side="left", padx=(16, 0))
+        self.academic_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="학술 표기 검사(실험적)", variable=self.academic_var).pack(side="left", padx=10)
 
         paned = ttk.PanedWindow(self, orient="horizontal")
-        paned.pack(fill="both", expand=True, padx=6, pady=4)
+        paned.pack(fill="both", expand=True, padx=18, pady=8)
 
         left = ttk.Frame(paned)
-        self.editor = tk.Text(left, wrap="word", font=("맑은 고딕", 11), undo=True)
+        self.editor = tk.Text(left, wrap="word", font=("맑은 고딕", 11), undo=True,
+                              background="white", foreground="#183954", padx=14, pady=14,
+                              relief="flat", spacing1=4, spacing3=5)
         scroll = ttk.Scrollbar(left, command=self.editor.yview)
         self.editor.configure(yscrollcommand=scroll.set)
         self.editor.pack(side="left", fill="both", expand=True)
         scroll.pack(side="right", fill="y")
-        self.editor.tag_configure("issue", background="#ffe08a")
+        for name, color in {"문장": "#fbe4a5", "문체": "#bde2f5", "반복": "#d9d0f2", "학술": "#cfeadd"}.items():
+            self.editor.tag_configure(name, background=color)
         self.editor.bind("<KeyRelease>", self._on_key)
         self._pending = None
         paned.add(left, weight=3)
@@ -164,34 +191,50 @@ class App(tk.Tk):
 
         paned.add(right, weight=2)
 
-        self.status = ttk.Label(self, text="docx 파일을 열거나 텍스트를 직접 입력한 뒤 '분석 실행'을 누르세요.")
-        self.status.pack(fill="x", padx=6, pady=2)
+        self.status = ttk.Label(self, text="원고를 불러오거나 텍스트를 입력하세요. 검사 결과는 참고용 제안입니다.")
+        self.status.pack(fill="x", padx=18, pady=8)
 
     def open_docx(self):
-        if Document is None:
-            messagebox.showerror("오류", "python-docx가 없습니다: pip install python-docx")
-            return
-        path = filedialog.askopenfilename(filetypes=[("Word 문서", "*.docx")])
+        path = filedialog.askopenfilename(filetypes=[("문서", "*.docx *.txt *.md")])
         if not path:
             return
-        doc = Document(path)
-        text = "\n".join(p.text for p in doc.paragraphs)
-        self.editor.delete("1.0", "end")
-        self.editor.insert("1.0", text)
-        self.status.config(text=f"불러옴: {path}")
+        try:
+            loaded = load_document(path)
+            self.editor.delete("1.0", "end")
+            self.editor.insert("1.0", loaded.text)
+            self.source_path = loaded.path
+            self.status.config(text=f"{loaded.path.name} · {loaded.notice}")
+            self.run_analysis()
+        except Exception as exc:
+            messagebox.showerror("문서 열기 실패", str(exc))
 
     def save_docx(self):
-        if Document is None:
-            messagebox.showerror("오류", "python-docx가 없습니다: pip install python-docx")
-            return
-        path = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word 문서", "*.docx")])
+        path = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word 문서", "*.docx")],
+                                            title="원본과 다른 새 파일 이름으로 저장")
         if not path:
             return
-        doc = Document()
-        for para in self.editor.get("1.0", "end-1c").split("\n"):
-            doc.add_paragraph(para)
-        doc.save(path)
-        self.status.config(text=f"저장됨: {path}")
+        if not messagebox.askyesno("새 DOCX 초안", "텍스트만 새 문서에 저장합니다. 원본의 서식·이미지·표는 복제하지 않습니다. 계속할까요?"):
+            return
+        try:
+            saved = export_plain_docx(self.editor.get("1.0", "end-1c"), path, original=self.source_path)
+            self.status.config(text=f"새 초안 저장: {saved.name} · 원본 변경 없음")
+        except Exception as exc:
+            messagebox.showerror("저장 실패", str(exc))
+
+    def export_report(self):
+        self.run_analysis()
+        if self.analysis_result is None:
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".html", filetypes=[
+            ("HTML 보고서", "*.html"), ("Markdown 보고서", "*.md")])
+        if not path:
+            return
+        try:
+            saved = save_report(path, self.editor.get("1.0", "end-1c"), self.analysis_result,
+                                original=self.source_path)
+            self.status.config(text=f"검사 보고서 저장: {saved.name}")
+        except Exception as exc:
+            messagebox.showerror("보고서 저장 실패", str(exc))
 
     def copy_all(self):
         self.clipboard_clear()
@@ -203,23 +246,38 @@ class App(tk.Tk):
             return
         if self._pending:
             self.after_cancel(self._pending)
-        self._pending = self.after(500, self.run_analysis)
+        self._pending = self.after(650, self.run_analysis)
 
     def run_analysis(self):
         self._pending = None
         text = self.editor.get("1.0", "end-1c")
         if not text.strip():
+            self.analysis_result = None
+            self.issues = []
+            for row in self.issue_tree.get_children():
+                self.issue_tree.delete(row)
+            for category in ("문장", "문체", "반복", "학술"):
+                self.editor.tag_remove(category, "1.0", "end")
             self.status.config(text="분석할 텍스트가 없습니다.")
             return
-        self.issues, stats, top_words = analyze(text, long_sent_limit=self.limit_var.get())
+        try:
+            self.analysis_result = analyze_text(text, long_sentence_limit=self.limit_var.get(),
+                                                academic_checks=self.academic_var.get())
+        except (ValueError, tk.TclError) as exc:
+            self.status.config(text=f"설정을 확인하세요: {exc}")
+            return
+        result = self.analysis_result
+        self.issues = [(issue.category, issue.message, issue.start, issue.end) for issue in result.issues]
+        stats, top_words = result.stats, result.top_words
 
-        self.editor.tag_remove("issue", "1.0", "end")
+        for category in ("문장", "문체", "반복", "학술"):
+            self.editor.tag_remove(category, "1.0", "end")
         for row in self.issue_tree.get_children():
             self.issue_tree.delete(row)
         for i, (kind, msg, s, e) in enumerate(self.issues):
             self.issue_tree.insert("", "end", iid=str(i), values=(kind, msg))
             if e > s:
-                self.editor.tag_add("issue", f"1.0+{s}c", f"1.0+{e}c")
+                self.editor.tag_add(kind, f"1.0+{s}c", f"1.0+{e}c")
 
         self.stats_text.config(state="normal")
         self.stats_text.delete("1.0", "end")
@@ -233,7 +291,7 @@ class App(tk.Tk):
         self.words_text.config(state="disabled")
 
         self.status.config(
-            text=f"글자수 {stats['글자수(공백제외)']:,}자 | 단어 {stats['단어수']:,}개 | 문장 {stats['문장수']}개 | 이슈 {len(self.issues)}건"
+            text=f"글자 {stats['글자 수(공백 제외)']:,}자 | 단어 {stats['단어 수(공백 기준)']:,}개 | 문장 {stats['문장 수']}개 | 검토 후보 {len(self.issues)}건"
         )
 
     def jump_to_issue(self, _event):

@@ -1,88 +1,77 @@
-[![English](https://img.shields.io/badge/README-English-24292f?style=for-the-badge)](./README.md) [![한국어](https://img.shields.io/badge/README-%ED%95%9C%EA%B5%AD%EC%96%B4-24292f?style=for-the-badge)](./README.ko.md)
+<div align="center">
 
 # Paper Assistant
 
-A lightweight offline writing assistant for reviewing Korean academic-paper and report drafts.
+**Offline academic writing review for Korean manuscripts**
 
-It analyzes text locally without an AI API or external server and provides both a Python GUI and Microsoft Word VBA macros.
+[![Python CI](https://github.com/homesweetlove/paper-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/homesweetlove/paper-assistant/actions/workflows/ci.yml)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-236d9d?logo=windows)](https://github.com/homesweetlove/paper-assistant/releases)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3572A5?logo=python&logoColor=white)](pyproject.toml)
+[![MIT License](https://img.shields.io/badge/License-MIT-197B64)](LICENSE)
 
-## Features
+[**한국어 설명**](README.ko.md) · [**Releases**](https://github.com/homesweetlove/paper-assistant/releases) · [**Change log**](CHANGELOG.md)
 
-### Python GUI
+</div>
 
-`paper_assistant.pyw` is a Tkinter-based desktop tool.
+Paper Assistant helps reviewers identify passages worth revisiting in Korean academic papers and reports. It works **locally**, without an AI API, internet connection, telemetry, or server-side document upload. Its suggestions are transparent, rule-based heuristics — **not verdicts about correctness or research quality**.
 
-- Write or paste text directly
-- Open / save `.docx` documents
-- Character, word, sentence, and paragraph statistics
-- Average sentence-length calculation
-- Long-sentence detection
-- Exclamation / question sentence detection
-- Conversational sentence-ending detection
-- Sentence-opening conjunction, first-person expression, and excessive modifier checks
-- Repeated-word and word-frequency analysis
-- Real-time analysis and problem-area highlighting
+## Highlights
 
-### Microsoft Word VBA
+| | Feature | What it does |
+| --- | --- | --- |
+| 📝 | Text inspection | Long sentences, conversational endings, first-person language, repetitive expressions |
+| 📚 | Optional academic checks | Abbreviation definitions, inconsistent millisecond units, figures/tables without a matching body reference |
+| 📈 | Statistics | Character, sentence, paragraph, word counts, repeated words and DOI string counts |
+| 🔎 | Review navigator | Colored issue highlights, click-to-jump, issue list, live analysis |
+| 🔐 | Original protection | Reads Word documents without modifying them; blocks overwriting input or existing output files |
+| 📑 | Review report | Save a separate HTML or Markdown report, with contextual snippets |
+| 🧩 | Word VBA | Optional user-triggered review comments; preserves existing highlights and user comments |
 
-- `PaperAssist.bas` — VBA module for real-time sentence checking in Word
-- `PaperAssist_ko.bas` — VBA module designed with Korean usage in mind
+## Install and run
 
-The Word macro version highlights long sentences, exclamations/questions, and selected conversational expressions.
+**Windows:** Get the optional packaged `PaperAssistant.exe` from [GitHub Releases](https://github.com/homesweetlove/paper-assistant/releases) when available. It is currently **unsigned**, so review its origin and SHA-256 checksum. A warning may appear on Windows SmartScreen. No Excel or Word installation is needed for the Python GUI.
 
-## Runtime
+**Python (Windows/Linux/macOS):**
 
-- Windows recommended
-- Python 3.x
-- Tkinter
-- `python-docx` — used for opening/saving Word documents
-
-Tkinter is included in standard Windows Python installations.
-
-### Install
-
-```powershell
-pip install python-docx
-```
-
-### Run
-
-```powershell
-pythonw paper_assistant.pyw
-```
-
-To keep the console visible:
-
-```powershell
+```bash
+python -m pip install -r requirements.txt
 python paper_assistant.pyw
 ```
 
-## Using the Word VBA Version
+Python 3.10+ and Tkinter are required. On some Linux distributions Tkinter is a separate system package. Word `.docx` support uses `python-docx`.
 
-1. Open the VBA editor in Microsoft Word with `Alt + F11`.
-2. Use **File → Import File** to import `PaperAssist.bas` or `PaperAssist_ko.bas`.
-3. Use it in a document where macro execution is allowed.
-4. Run `CheckAll` to review the full document.
-5. Run `ClearMarks` to remove the highlights.
+### Read-only manuscript workflow
 
-Follow the macro security policy of your PC or organization.
+1. Open a `.docx`, `.txt`, or `.md` file — or paste text directly.
+2. Review sentence/style/repetition suggestions and change the long-sentence threshold as needed.
+3. Turn on **experimental academic checks** only if you want extra notation suggestions.
+4. Export a **separate HTML or Markdown report**. The input document is never written back automatically.
+5. If needed, create a **new text-only DOCX draft**. This does **not** copy the original document's figures, styles, footnotes, or embedded objects, and cannot overwrite the loaded original.
 
-## Project Structure
+The `.docx` analyzer includes paragraphs and tables in reading order; some elements such as footnotes or embedded shapes may not be included. Always retain the original document.
 
-```text
-paper-assistant/
-├─ paper_assistant.pyw   # Python/Tkinter desktop app
-├─ PaperAssist.bas       # Word VBA version
-├─ PaperAssist_ko.bas    # Korean-oriented Word VBA version
-└─ README.md
+## Microsoft Word VBA (optional)
+
+- `PaperAssist_ko.bas` — Korean review comments; saved in Korean Windows-compatible CP949 encoding.
+- `PaperAssist.bas` — simpler English-language review comments.
+
+Open Word → `Alt + F11` → **File → Import File** and import **only one** module. Run `전체검사` (Korean) or `CheckAll` (English) manually; run `표시지우기` or `ClearMarks` to remove **only Paper Assistant's own comments**. Existing document highlights and other people's comments are preserved. There is no automatic 1-second timer or `AutoExec` macro. Word macro security settings remain the user's responsibility.
+
+## Build and quality
+
+```bash
+python -m unittest discover -s tests -v
+python -m py_compile paper_assistant.pyw
 ```
 
-## About the Analysis Rules
+CI runs offline tests on Windows and Linux. The Windows release workflow packages the GUI using PyInstaller and publishes an EXE with SHA-256 on a `v*` tag. See [release instructions](docs/RELEASE.md).
 
-Checks are based on regular expressions and simple heuristics. A flagged sentence is not necessarily incorrect.
+## Limitations
 
-This tool does not judge factual accuracy, citation correctness, academic validity, or research ethics. It is intended as a **writing assistant that quickly surfaces passages worth reviewing again**.
+- Korean segmentation and writing rules are approximate. Some suggestions will be false positives.
+- DOI string detection is **not** DOI verification; there is no external citation lookup.
+- Academic checks cannot assess novelty, statistical validity, factual accuracy, plagiarism, or whether a paper is publishable.
+- Report files may include manuscript excerpts. Handle them as private research material.
+- VBA behavior has source-level safety checks, but must be validated in the user's installed Microsoft Word version.
 
-## Privacy
-
-The Python version performs text analysis locally. It does not include AI API calls or remote-server uploads.
+The source is released under the [MIT License](LICENSE). See [Security](SECURITY.md) and [Changelog](CHANGELOG.md).

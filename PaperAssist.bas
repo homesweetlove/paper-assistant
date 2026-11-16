@@ -1,90 +1,58 @@
 Attribute VB_Name = "PaperAssist"
 Option Explicit
 
-Public AssistOn As Boolean
+' Import ONE module: PaperAssist.bas OR PaperAssist_ko.bas, never both.
+' No AutoExec or repeating OnTime timer: review only runs on explicit request.
+' The tool adds labeled comments, never changes document highlights or text.
+Private Const COMMENT_PREFIX As String = "[PaperAssistant] "
+Private Const MAX_COMMENTS As Long = 200
 Public LongSentLimit As Long
 
-' Runs automatically when Word starts
-Sub AutoExec()
-    EnableAssist
+Public Sub CheckAll()
+    Dim para As Paragraph
+    Dim sentence As Range
+    Dim note As String
+    Dim written As Long
+    If Application.Documents.Count = 0 Then Exit Sub
+    If LongSentLimit < 20 Then LongSentLimit = 100
+    ClearMarks
+    On Error GoTo ReviewFailed
+    For Each para In ActiveDocument.Paragraphs
+        For Each sentence In para.Range.Sentences
+            note = SuggestionFor(sentence.Text)
+            If Len(note) > 0 Then
+                ActiveDocument.Comments.Add Range:=sentence, Text:=COMMENT_PREFIX & note
+                written = written + 1
+                If written >= MAX_COMMENTS Then Exit For
+            End If
+        Next sentence
+        If written >= MAX_COMMENTS Then Exit For
+    Next para
+    MsgBox "Review comments added: " & written & vbCrLf & _
+           "This is a rule-based suggestion, not a correctness verdict.", vbInformation
+    Exit Sub
+ReviewFailed:
+    MsgBox "Review stopped: " & Err.Description, vbExclamation
 End Sub
 
-Sub EnableAssist()
-    If LongSentLimit = 0 Then LongSentLimit = 100
-    If AssistOn Then Exit Sub
-    AssistOn = True
-    LiveTick
+Public Sub ClearMarks()
+    ' Keep every pre-existing highlight and every user-authored comment.
+    Dim i As Long
+    Dim c As Comment
+    If Application.Documents.Count = 0 Then Exit Sub
+    For i = ActiveDocument.Comments.Count To 1 Step -1
+        Set c = ActiveDocument.Comments(i)
+        If Left$(c.Range.Text, Len(COMMENT_PREFIX)) = COMMENT_PREFIX Then c.Delete
+    Next i
 End Sub
 
-Sub DisableAssist()
-    AssistOn = False
-End Sub
-
-' Checks the current paragraph every second
-Sub LiveTick()
-    On Error Resume Next
-    If AssistOn Then
-        If Application.Documents.Count > 0 Then
-            CheckParagraph Application.Selection.Range.Paragraphs(1).Range
-        End If
-        Application.OnTime Now + TimeValue("0:00:01"), "LiveTick"
+Private Function SuggestionFor(ByVal text As String) As String
+    Dim current As String
+    current = Trim$(Replace(Replace(text, vbCr, ""), vbLf, ""))
+    If Len(current) < 2 Then Exit Function
+    If Len(current) >= LongSentLimit Then
+        SuggestionFor = "Long sentence; consider splitting it."
+    ElseIf InStr(current, "!") > 0 Or InStr(current, "?") > 0 Then
+        SuggestionFor = "Question or exclamation; review the academic tone."
     End If
-    On Error GoTo 0
-End Sub
-
-' Checks the whole document (run via Alt+F8)
-Sub CheckAll()
-    Dim p As Paragraph
-    Application.ScreenUpdating = False
-    For Each p In ActiveDocument.Paragraphs
-        CheckParagraph p.Range
-    Next
-    Application.ScreenUpdating = True
-    MsgBox "Done." & vbCrLf & _
-           "Yellow = long sentence / Pink = colloquial style / Blue = question or exclamation", vbInformation
-End Sub
-
-Sub ClearMarks()
-    ActiveDocument.Range.HighlightColorIndex = wdNoHighlight
-End Sub
-
-Sub CheckParagraph(rng As Range)
-    Dim s As Range
-    On Error Resume Next
-    For Each s In rng.Sentences
-        CheckSentence s
-    Next
-    On Error GoTo 0
-End Sub
-
-Sub CheckSentence(s As Range)
-    Dim t As String
-    t = s.Text
-    If Len(Trim(t)) < 2 Then Exit Sub
-
-    s.HighlightColorIndex = wdNoHighlight
-    If Len(t) > LongSentLimit Then
-        s.HighlightColorIndex = wdYellow
-    ElseIf InStr(t, "!") > 0 Or InStr(t, "?") > 0 Then
-        s.HighlightColorIndex = wdTurquoise
-    ElseIf HasStyleIssue(t) Then
-        s.HighlightColorIndex = wdPink
-    End If
-End Sub
-
-Function HasStyleIssue(t As String) As Boolean
-    ' Korean patterns are written as \uXXXX escapes to avoid encoding problems
-    Static reEnd As Object, reWord As Object, reOpen As Object
-    If reEnd Is Nothing Then
-        Set reEnd = CreateObject("VBScript.RegExp")
-        ' Colloquial endings: 해요 했어요 이에요 예요 이예요 죠 네요 거든요 잖아요 군요 구나 어라
-        reEnd.Pattern = "(\ud574\uc694|\ud588\uc5b4\uc694|\uc774\uc5d0\uc694|\uc608\uc694|\uc774\uc608\uc694|\uc8e0|\ub124\uc694|\uac70\ub4e0\uc694|\uc796\uc544\uc694|\uad70\uc694|\uad6c\ub098|\uc5b4\ub77c)\s*[.!?'""]?\s*$"
-        ' Bad words: 내가 저는 우리는 매우 정말 아주 굉장히 엄청 되게 진짜
-        Set reWord = CreateObject("VBScript.RegExp")
-        reWord.Pattern = "(\ub0b4\uac00|\uc800\ub294|\uc6b0\ub9ac\ub294|\ub9e4\uc6b0|\uc815\ub9d0|\uc544\uc8fc|\uad49\uc7a5\ud788|\uc5c4\uccad|\ub418\uac8c|\uc9c4\uc9dc)"
-        ' Sentence openers: 그래서 근데 그리고 하지만 그런데 그러면
-        Set reOpen = CreateObject("VBScript.RegExp")
-        reOpen.Pattern = "^\s*(\uadf8\ub798\uc11c|\uadfc\ub370|\uadf8\ub9ac\uace0|\ud558\uc9c0\ub9cc|\uadf8\ub7f0\ub370|\uadf8\ub7ec\uba74)"
-    End If
-    HasStyleIssue = reEnd.Test(t) Or reWord.Test(t) Or reOpen.Test(t)
 End Function
