@@ -33,7 +33,9 @@ class DocumentTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 export_plain_docx("test", original, original=original)
             output = Path(folder) / "new.docx"
-            self.assertEqual(export_plain_docx("첫 문단\n둘째 문단", output, original=original), output)
+            # Windows temp paths can be represented with either long or 8.3 names.
+            # Verify that the returned path points to the actual output file.
+            self.assertTrue(export_plain_docx("첫 문단\n둘째 문단", output, original=original).samefile(output))
             self.assertEqual(len(Document(output).paragraphs), 2)
             with self.assertRaises(FileExistsError):
                 export_plain_docx("overwrite", output)
