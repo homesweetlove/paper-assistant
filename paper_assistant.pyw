@@ -130,6 +130,7 @@ class App(tk.Tk):
         self.issues = []
         self.source_path = None
         self.analysis_result = None
+        self.orchestra_window = None
         self._build_ui()
 
     def _build_ui(self):
@@ -144,6 +145,7 @@ class App(tk.Tk):
         ttk.Button(bar, text="새 DOCX 초안", command=self.save_docx).pack(side="left", padx=4)
         ttk.Button(bar, text="검사 보고서", command=self.export_report).pack(side="left", padx=4)
         ttk.Button(bar, text="분석 실행", command=self.run_analysis).pack(side="left", padx=4)
+        ttk.Button(bar, text="AI 논문 작성", command=self.open_orchestra).pack(side="left", padx=4)
         ttk.Button(bar, text="전체 복사", command=self.copy_all).pack(side="left", padx=4)
         ttk.Label(bar, text="긴 문장 기준:").pack(side="left", padx=(16, 2))
         self.limit_var = tk.IntVar(value=100)
@@ -207,6 +209,15 @@ class App(tk.Tk):
             self.run_analysis()
         except Exception as exc:
             messagebox.showerror("문서 열기 실패", str(exc))
+
+    def open_orchestra(self):
+        if self.orchestra_window is not None and self.orchestra_window.winfo_exists():
+            self.orchestra_window.lift()
+            self.orchestra_window.focus_force()
+            return
+        from paper_assistant.orchestra_ui import PaperOrchestraWindow
+
+        self.orchestra_window = PaperOrchestraWindow(self)
 
     def save_docx(self):
         path = filedialog.asksaveasfilename(defaultextension=".docx", filetypes=[("Word 문서", "*.docx")],

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paper-assistant-offline"
-version = "0.2.0"
-description = "Offline Korean academic-writing review assistant"
+version = "0.3.0"
+description = "Offline Korean manuscript review with optional AI paper writing"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

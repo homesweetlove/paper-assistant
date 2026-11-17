@@ -22,7 +22,7 @@ jobs:
       - name: Test before packaging
         run: python -m unittest discover -s tests -v
       - name: Build standalone EXE
-        run: python -m PyInstaller --onefile --windowed --clean --noconfirm --collect-all docx --name PaperAssistant paper_assistant.pyw
+        run: python -m PyInstaller --onefile --windowed --clean --noconfirm --collect-all docx --add-data "paper_assistant/orchestra_bootstrap.py;paper_assistant" --name PaperAssistant paper_assistant.pyw
       - name: Compute SHA-256
         shell: pwsh
         run: (Get-FileHash dist/PaperAssistant.exe -Algorithm SHA256).Hash.ToLower() + '  PaperAssistant.exe' | Out-File -Encoding ascii dist/PaperAssistant.exe.sha256

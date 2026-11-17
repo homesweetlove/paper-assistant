@@ -29,4 +29,4 @@ jobs:
       - name: Run offline analysis and document safety tests
         run: python -m unittest discover -s tests -v
       - name: Check Python syntax
-        run: python -m py_compile paper_assistant.pyw paper_assistant/analysis.py paper_assistant/documents.py paper_assistant/reports.py
+        run: python -m py_compile paper_assistant.pyw paper_assistant/analysis.py paper_assistant/documents.py paper_assistant/reports.py paper_assistant/orchestra.py paper_assistant/orchestra_ui.py paper_assistant/orchestra_bootstrap.py
